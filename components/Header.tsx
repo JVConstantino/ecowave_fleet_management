@@ -1,16 +1,17 @@
 
 import React from 'react';
 import { APP_NAME } from '../constants';
-import { AuthenticatedUser, UserRole, AdminUserInfo, CondominiumInfo } from '../types';
+import { AuthenticatedUser, UserRole, SuperAdminUserInfo, CondoAdminCompanyInfo, CondominiumInfo } from '../types';
 import Button from './ui/Button';
-import { AuthenticatedAppView } from './Sidebar'; // Import the type
+import { AuthenticatedAppView } from './Sidebar'; 
 
 interface HeaderProps {
   isAuthenticated: boolean;
   user: AuthenticatedUser;
   userRole: UserRole;
   onLogout: () => void;
-  authenticatedAppView: AuthenticatedAppView; // To determine title context
+  authenticatedAppView: AuthenticatedAppView;
+  selectedAdminCompanyName?: string | null;
   selectedCondominiumName?: string | null; 
 }
 
@@ -33,41 +34,57 @@ const Header: React.FC<HeaderProps> = ({
     userRole, 
     onLogout, 
     authenticatedAppView, 
+    selectedAdminCompanyName,
     selectedCondominiumName 
 }) => {
   let mainTitle = APP_NAME;
   let subTitle: string | null = null;
 
   if (isAuthenticated && user) {
-    if (userRole === 'admin') {
-      const adminUser = user as AdminUserInfo;
-      if (authenticatedAppView === 'dashboard' && selectedCondominiumName) {
-        mainTitle = APP_NAME;
-        subTitle = `Painel: ${selectedCondominiumName}`;
-      } else if (authenticatedAppView === 'reports' && selectedCondominiumName) {
-        mainTitle = APP_NAME;
-        subTitle = `Relatórios: ${selectedCondominiumName}`;
-      } else if (authenticatedAppView === 'admin') {
-        mainTitle = APP_NAME;
-        subTitle = "Painel do Administrador";
-      } else { 
-        mainTitle = APP_NAME;
-        subTitle = adminUser.name; 
-      }
-    } else if (userRole === 'condominium') {
-      const condoUser = user as CondominiumInfo;
-      if (authenticatedAppView === 'dashboard') {
-        mainTitle = APP_NAME;
-        subTitle = condoUser.name;
-      } else if (authenticatedAppView === 'reports') {
-        mainTitle = APP_NAME;
-        subTitle = `Relatórios: ${condoUser.name}`;
-      } else {
-        mainTitle = APP_NAME;
-        subTitle = condoUser.name; // Fallback for condo user
-      }
+    switch (userRole) {
+      case 'superAdmin':
+        const superAdminUser = user as SuperAdminUserInfo;
+        if (authenticatedAppView === 'superAdminManagement') {
+          subTitle = "Painel Super Admin";
+        } else if (authenticatedAppView === 'condominiumManagement' && selectedAdminCompanyName) {
+          subTitle = `Gerenciando Condomínios de: ${selectedAdminCompanyName}`;
+        } else if (authenticatedAppView === 'clientDetails' && selectedAdminCompanyName && selectedCondominiumName) {
+          subTitle = `Detalhes: ${selectedCondominiumName} (Admin: ${selectedAdminCompanyName})`;
+        } else if ((authenticatedAppView === 'dashboard' || authenticatedAppView === 'reports') && selectedAdminCompanyName && selectedCondominiumName) {
+          const viewLabel = authenticatedAppView === 'dashboard' ? 'Painel' : 'Relatórios';
+          subTitle = `${viewLabel}: ${selectedCondominiumName} (Admin: ${selectedAdminCompanyName})`;
+        } else {
+          subTitle = superAdminUser.name;
+        }
+        break;
+      
+      case 'condoAdminCompany':
+        const adminCompanyUser = user as CondoAdminCompanyInfo;
+        if (authenticatedAppView === 'condominiumManagement') {
+          subTitle = `Meus Condomínios: ${adminCompanyUser.name}`;
+        } else if (authenticatedAppView === 'clientDetails' && selectedCondominiumName) {
+          subTitle = `Detalhes: ${selectedCondominiumName} (${adminCompanyUser.name})`;
+        } else if ((authenticatedAppView === 'dashboard' || authenticatedAppView === 'reports') && selectedCondominiumName) {
+          const viewLabel = authenticatedAppView === 'dashboard' ? 'Painel' : 'Relatórios';
+          subTitle = `${viewLabel}: ${selectedCondominiumName} (${adminCompanyUser.name})`;
+        } else {
+          subTitle = adminCompanyUser.name;
+        }
+        break;
+
+      case 'condominiumUser':
+        const condoUser = user as CondominiumInfo;
+        if (authenticatedAppView === 'dashboard') {
+          subTitle = condoUser.name;
+        } else if (authenticatedAppView === 'reports') {
+          subTitle = `Relatórios: ${condoUser.name}`;
+        } else {
+          subTitle = condoUser.name; 
+        }
+        break;
     }
   }
+
 
   return (
     <header className="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-md fixed top-0 left-0 right-0 z-50 h-16">
@@ -79,7 +96,7 @@ const Header: React.FC<HeaderProps> = ({
           </div>
           <div className="flex items-center space-x-4">
             {subTitle && (
-              <div className="text-sm font-medium hidden sm:block">
+              <div className="text-sm font-medium hidden sm:block truncate max-w-xs md:max-w-md lg:max-w-lg" title={subTitle}>
                 {subTitle}
               </div>
             )}
@@ -91,7 +108,7 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
          {subTitle && (
-            <div className="sm:hidden text-xs font-medium text-center pb-2 -mt-2"> {/* Adjust for fixed height */}
+            <div className="sm:hidden text-xs font-medium text-center pb-2 -mt-2 truncate" title={subTitle}>
               {subTitle}
             </div>
           )}

@@ -1,23 +1,145 @@
 
-import { WaterConsumptionRecord, ChartDataPoint, OverallMetrics, CondominiumInfo, PumpStatus, TankLevel, TankLocation, TankLevelRecord } from '../types';
+import { 
+    WaterConsumptionRecord, 
+    ChartDataPoint, 
+    OverallMetrics, 
+    CondominiumInfo, 
+    PumpStatus, 
+    TankLevel, 
+    TankLocation, 
+    TankLevelRecord, 
+    PressureRecord, 
+    PumpEnergyRecord, 
+    ContactInfo, 
+    ContractDetails, 
+    MqttConfig, 
+    SupportInfo,
+    CondoAdminCompanyInfo, // New import
+    SuperAdminUserInfo // New import
+} from '../types';
+import { MOCK_SUPER_ADMIN_EMAIL, MOCK_CONDO_ADMIN_COMPANY_EMAIL_1 } from '../constants'; // Import new emails
 
 const DEFAULT_PRICE_PER_M3 = 5.75; // R$ 5,75 / m³
+const DEFAULT_PRICE_PER_KWH = 0.75; // R$ 0,75 / KWh
 
-// Mock storage for client companies (condominiums)
-const MOCK_COMPANIES: CondominiumInfo[] = [
-    { id: 'condo-123', name: 'Residencial Águas Claras (Default)', registrationDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10).toISOString(), pricePerM3: 5.50 },
-    { id: 'condo-789', name: 'Condomínio Sol Nascente', registrationDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), pricePerM3: 6.00 },
-    { id: 'condo-abc', name: 'Edifício Vista Verde', registrationDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(), pricePerM3: 5.25 },
+// --- Default Object Creators ---
+const getDefaultContactInfo = (): ContactInfo => ({
+    primaryContactName: '', primaryContactEmail: '', primaryContactPhone: '',
+    secondaryContactName: '', secondaryContactEmail: '', secondaryContactPhone: ''
+});
+
+const getDefaultContractDetails = (): ContractDetails => ({
+    contractId: '', startDate: '', endDate: '', serviceLevel: 'standard', notes: ''
+});
+
+const getDefaultMqttConfig = (condoId: string): MqttConfig => ({
+    brokerUrl: 'mqtt://test.mosquitto.org:1883', username: '', password: '',
+    waterConsumptionTopic: `clients/${condoId}/water/consumption/total`,
+    tankLevelSuperiorTopic: `clients/${condoId}/tank/superior/level`,
+    tankLevelInferiorTopic: `clients/${condoId}/tank/inferior/level`,
+    pumpStatusTopic: `clients/${condoId}/pump/main/status`,
+    pressureConcessionaireTopic: `clients/${condoId}/pressure/concessionaire`,
+    pressureInternalTopic: `clients/${condoId}/pressure/internal`,
+    topicNotes: "Use {clientId} placeholder if configuring a template. This client ID is static."
+});
+
+const getDefaultSupportInfo = (): SupportInfo => ({
+    supportTier: 'silver', dedicatedSupportAgentName: '', lastSupportTicketId: '', internalSupportNotes: ''
+});
+
+// --- Mock Data ---
+
+// Super Admin User
+const MOCK_SUPER_ADMINS: SuperAdminUserInfo[] = [
+    { id: 'super-001', name: 'Super Administrador Global', email: MOCK_SUPER_ADMIN_EMAIL, type: 'superAdmin' }
 ];
+
+// Condo Administrator Companies
+const MOCK_CONDO_ADMIN_COMPANIES: CondoAdminCompanyInfo[] = [
+    { 
+        id: 'admincomp-001', 
+        name: 'Gestão de Águas Inteligentes Ltda.', 
+        adminUserEmail: MOCK_CONDO_ADMIN_COMPANY_EMAIL_1, // Updated Login for this company
+        responsiblePerson: 'Carlos Pereira',
+        companyRegistrationNumber: '11.222.333/0001-44'
+    },
+    { 
+        id: 'admincomp-002', 
+        name: 'EcoSíndicos Profissionais S.A.', 
+        adminUserEmail: 'admincomp2@example.com', // Login for this company
+        responsiblePerson: 'Mariana Costa',
+        companyRegistrationNumber: '55.666.777/0001-88'
+    },
+    {
+        id: 'admincomp-legacy',
+        name: 'Administradora Legada (JV)',
+        adminUserEmail: 'joaovictor.priv@gmail.com', // Old admin email
+        responsiblePerson: 'João Victor (Legado)',
+        companyRegistrationNumber: '99.999.999/0001-99'
+    }
+];
+
+// Condominiums (Clients managed by CondoAdminCompanies)
+const MOCK_CONDOMINIUMS: CondominiumInfo[] = [
+    { 
+        id: 'condominio01@gmail.com', // Updated ID for login: condominio01@gmail.com / 123456 (using MOCK_CONDO_PASSWORD)
+        name: 'Residencial Águas Claras (ID: condominio01@gmail.com)', // Name updated for clarity 
+        managingCompanyId: 'admincomp-001', // Managed by Gestão de Águas Inteligentes
+        registrationDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10).toISOString(), 
+        pricePerM3: 5.50, 
+        pricePerKWh: 0.78,
+        contactInfo: { primaryContactName: 'Síndico João Silva', primaryContactEmail: 'sindico.ac@email.com', primaryContactPhone: '(11) 98765-4321' },
+        contractDetails: { contractId: 'CTR-AC-001', startDate: '2023-01-15', endDate: '2025-01-14', serviceLevel: 'premium', notes: 'Cliente fundador, atenção especial.' },
+        mqttConfig: getDefaultMqttConfig('condominio01@gmail.com'),
+        supportInfo: { supportTier: 'gold', dedicatedSupportAgentName: 'Ana Pereira', lastSupportTicketId: 'SUP-987', internalSupportNotes: 'Renovação de contrato em breve.' }
+    },
+    { 
+        id: 'condo-789', 
+        name: 'Condomínio Sol Nascente', 
+        managingCompanyId: 'admincomp-001', // Managed by Gestão de Águas Inteligentes
+        registrationDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), 
+        pricePerM3: 6.00, 
+        pricePerKWh: 0.72,
+        contactInfo: { primaryContactName: 'Gerente Maria Oliveira', primaryContactEmail: 'gerencia.sn@email.com', primaryContactPhone: '(21) 91234-5678' },
+        contractDetails: { contractId: 'CTR-SN-002', startDate: '2023-06-01', serviceLevel: 'standard', notes: 'Solicitou treinamento adicional para equipe local.'},
+        mqttConfig: getDefaultMqttConfig('condo-789'),
+        supportInfo: { supportTier: 'silver', internalSupportNotes: 'Cliente satisfeito com os relatórios.' }
+    },
+    { 
+        id: 'condo-abc', 
+        name: 'Edifício Vista Verde', 
+        managingCompanyId: 'admincomp-002', // Managed by EcoSíndicos
+        registrationDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(), 
+        pricePerM3: 5.25, 
+        pricePerKWh: 0.80,
+        contactInfo: getDefaultContactInfo(),
+        contractDetails: getDefaultContractDetails(),
+        mqttConfig: getDefaultMqttConfig('condo-abc'),
+        supportInfo: getDefaultSupportInfo(),
+    },
+     { 
+        id: 'condo-legacy-1', 
+        name: 'Condomínio Antigo Principal', 
+        managingCompanyId: 'admincomp-legacy', // Managed by Administradora Legada (JV)
+        registrationDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString(), 
+        pricePerM3: 5.00, 
+        pricePerKWh: 0.70,
+        contactInfo: { primaryContactName: 'Síndico Legado', primaryContactEmail: 'sindico.legacy@email.com', primaryContactPhone: '(11) 99999-0000' },
+        contractDetails: getDefaultContractDetails(),
+        mqttConfig: getDefaultMqttConfig('condo-legacy-1'),
+        supportInfo: getDefaultSupportInfo(),
+    },
+];
+
 
 const generateMockDataForCondo = (condominiumId: string, numDays: number, pricePerM3: number): WaterConsumptionRecord[] => {
   const records: WaterConsumptionRecord[] = [];
   const today = new Date();
-  const baseConsumption = Math.random() * 0.3 + 0.1; // Base consumption varies per condo
+  const baseConsumption = Math.random() * 0.3 + 0.1; 
   
   for (let i = 0; i < numDays; i++) {
     const currentDate = new Date(today);
-    currentDate.setDate(today.getDate() - i); // Go back i days
+    currentDate.setDate(today.getDate() - i); 
     
     const numUnits = 2 + Math.floor(Math.random() * 3);
     for (let unitNum = 1; unitNum <= numUnits; unitNum++) {
@@ -35,30 +157,35 @@ const generateMockDataForCondo = (condominiumId: string, numDays: number, priceP
   return records.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()); 
 };
 
-const ALL_MOCK_DATA: WaterConsumptionRecord[] = MOCK_COMPANIES.reduce((acc, company) => {
+let ALL_MOCK_DATA: WaterConsumptionRecord[] = MOCK_CONDOMINIUMS.reduce((acc, company) => {
     return acc.concat(generateMockDataForCondo(company.id, 60, company.pricePerM3));
 }, [] as WaterConsumptionRecord[]);
 
-// --- Mock Data for Tank Level History ---
+
 let MOCK_TANK_LEVEL_HISTORY: TankLevelRecord[] = [];
 
-const generateMockTankLevelHistory = (condominiumId: string, numRecords: number = 720, daysToCover: number = 30) => {
+const generateMockTankLevelHistory = (condominiumId: string, tankType: 'superior' | 'inferior', numRecords: number = 720, daysToCover: number = 30) => {
     const records: TankLevelRecord[] = [];
     const now = Date.now();
     const intervalMs = (daysToCover * 24 * 60 * 60 * 1000) / numRecords;
-    let baseLevel = 50 + Math.random() * 30; // Base level between 50 and 80
+    let baseLevel = tankType === 'superior' ? (40 + Math.random() * 30) : (60 + Math.random() * 20); 
 
     for (let i = 0; i < numRecords; i++) {
         const recordDate = new Date(now - (numRecords - 1 - i) * intervalMs);
-        // Simulate level changes (e.g. usage drops, pump refills)
-        baseLevel += (Math.random() * 10 - 5); // Fluctuate
-        if (baseLevel < 10) baseLevel += 20 + Math.random() * 20; // Simulate pump refill
-        if (baseLevel > 95) baseLevel -= 10 + Math.random() * 10; // Simulate usage
-        baseLevel = Math.max(0, Math.min(100, baseLevel)); // Clamp between 0 and 100
+        if (tankType === 'superior') {
+            baseLevel += (Math.random() * 10 - 6); 
+            if (baseLevel < 15 && Math.random() < 0.2) baseLevel += 30 + Math.random() * 20; 
+        } else { 
+            baseLevel += (Math.random() * 6 - 3); 
+            if (baseLevel > 85 && Math.random() < 0.1) baseLevel -= 20 + Math.random() * 10; 
+            if (baseLevel < 30 && Math.random() < 0.15) baseLevel += 25 + Math.random() * 15; 
+        }
+        baseLevel = Math.max(0, Math.min(100, baseLevel));
 
         records.push({
-            id: `tlr-${condominiumId}-${recordDate.getTime()}-${i}`,
+            id: `tlr-${condominiumId}-${tankType}-${recordDate.getTime()}-${i}`,
             condominiumId: condominiumId,
+            tankType: tankType,
             date: recordDate.toISOString(),
             levelPercentage: parseFloat(baseLevel.toFixed(1)),
         });
@@ -66,78 +193,226 @@ const generateMockTankLevelHistory = (condominiumId: string, numRecords: number 
     MOCK_TANK_LEVEL_HISTORY.push(...records);
 };
 
-MOCK_COMPANIES.forEach(company => generateMockTankLevelHistory(company.id));
+MOCK_CONDOMINIUMS.forEach(company => {
+    generateMockTankLevelHistory(company.id, 'superior');
+    generateMockTankLevelHistory(company.id, 'inferior');
+});
+
+let MOCK_CONCESSIONAIRE_NETWORK_PRESSURE_HISTORY: PressureRecord[] = [];
+let MOCK_INTERNAL_NETWORK_PRESSURE_HISTORY: PressureRecord[] = [];
+
+const generateMockPressureHistory = (condominiumId: string, type: 'concessionaire' | 'internal', numRecords: number = 288, daysToCover: number = 30) => {
+    const records: PressureRecord[] = [];
+    const now = Date.now();
+    const intervalMs = (daysToCover * 24 * 60 * 60 * 1000) / numRecords;
+    let basePressure = type === 'concessionaire' ? (35 + Math.random() * 10) : (45 + Math.random() * 10); // PSI
+
+    for (let i = 0; i < numRecords; i++) {
+        const recordDate = new Date(now - (numRecords - 1 - i) * intervalMs);
+        if (type === 'concessionaire') {
+            basePressure += (Math.random() * 4 - 2); 
+            if (Math.random() < 0.05) basePressure -= Math.random() * 5; 
+        } else { 
+            basePressure += (Math.random() * 8 - 4); 
+            if (Math.random() < 0.1) basePressure += Math.random() * 10; 
+        }
+        basePressure = Math.max(10, Math.min(80, basePressure));
+
+        records.push({
+            id: `pr-${condominiumId}-${type}-${recordDate.getTime()}-${i}`,
+            condominiumId: condominiumId,
+            date: recordDate.toISOString(),
+            pressurePSI: parseFloat(basePressure.toFixed(1)),
+        });
+    }
+    if (type === 'concessionaire') MOCK_CONCESSIONAIRE_NETWORK_PRESSURE_HISTORY.push(...records);
+    else MOCK_INTERNAL_NETWORK_PRESSURE_HISTORY.push(...records);
+};
+
+let MOCK_PUMP_ENERGY_HISTORY: PumpEnergyRecord[] = [];
+
+const generateMockPumpEnergyHistory = (condominiumId: string, pricePerKWh: number, numRecords: number = 720, daysToCover: number = 30) => {
+    const records: PumpEnergyRecord[] = [];
+    const now = Date.now();
+    const intervalMs = (daysToCover * 24 * 60 * 60 * 1000) / numRecords; 
+
+    for (let i = 0; i < numRecords; i++) {
+        const recordDate = new Date(now - (numRecords - 1 - i) * intervalMs);
+        let energyKWh = 0;
+        
+        const hour = recordDate.getHours();
+        if (hour > 6 && hour < 22 && Math.random() < 0.3) { 
+            energyKWh = parseFloat((0.5 + Math.random() * 1.5).toFixed(2)); 
+        } else if (Math.random() < 0.05) { 
+             energyKWh = parseFloat((0.3 + Math.random() * 0.7).toFixed(2));
+        }
+        
+        records.push({
+            id: `per-${condominiumId}-${recordDate.getTime()}-${i}`,
+            condominiumId: condominiumId,
+            date: recordDate.toISOString(),
+            energyKWh: energyKWh,
+            cost: parseFloat((energyKWh * pricePerKWh).toFixed(2)),
+        });
+    }
+    MOCK_PUMP_ENERGY_HISTORY.push(...records);
+};
+
+MOCK_CONDOMINIUMS.forEach(company => {
+    generateMockPressureHistory(company.id, 'concessionaire');
+    generateMockPressureHistory(company.id, 'internal');
+    generateMockPumpEnergyHistory(company.id, company.pricePerKWh);
+});
 
 
-// --- Mock Data for New Features ---
-let MOCK_PUMP_STATUSES: PumpStatus[] = MOCK_COMPANIES.map(company => ({
+let MOCK_PUMP_STATUSES: PumpStatus[] = MOCK_CONDOMINIUMS.map(company => ({
   condominiumId: company.id,
-  pressurePSI: Math.floor(Math.random() * 30) + 30, // 30-59 PSI
+  pressurePSI: Math.floor(Math.random() * 30) + 30, 
   isActive: Math.random() > 0.5,
   lastChanged: new Date(Date.now() - Math.random() * 1000 * 60 * 60 * 24).toISOString(),
 }));
 
-let MOCK_TANK_LEVELS: TankLevel[] = MOCK_COMPANIES.map(company => ({
+let MOCK_TANK_LEVELS: TankLevel[] = MOCK_CONDOMINIUMS.map(company => ({
   condominiumId: company.id,
-  levelPercentage: Math.floor(Math.random() * 70) + 30, // 30-99%
-  lastUpdated: new Date(Date.now() - Math.random() * 1000 * 60 * 30).toISOString(), // Updated in last 30 mins
+  levelPercentage: Math.floor(Math.random() * 70) + 30, 
+  lastUpdated: new Date(Date.now() - Math.random() * 1000 * 60 * 30).toISOString(), 
 }));
 
-const MOCK_TANK_LOCATIONS: TankLocation[] = MOCK_COMPANIES.map((company, index) => ({
+const MOCK_TANK_LOCATIONS: TankLocation[] = MOCK_CONDOMINIUMS.map((company, index) => ({
   condominiumId: company.id,
-  latitude: -23.550520 + (Math.random() - 0.5) * 0.01 * (index +1), // Around São Paulo
+  latitude: -23.550520 + (Math.random() - 0.5) * 0.01 * (index +1), 
   longitude: -46.633308 + (Math.random() - 0.5) * 0.01 * (index+1),
   address: `Rua Fictícia, ${100 + index * 50}, Bairro ${company.name.split(' ')[0]}, Cidade Exemplo`,
 }));
 
-// Helper to add new company data to new mocks
-const initializeNewCompanyMockData = (companyId: string, companyName: string) => {
+// --- New Service Functions for 3-Tier System ---
+
+export const authenticateSuperAdmin = async (email: string): Promise<SuperAdminUserInfo | undefined> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return MOCK_SUPER_ADMINS.find(sa => sa.email === email);
+};
+
+export const authenticateCondoAdminCompany = async (email: string): Promise<CondoAdminCompanyInfo | undefined> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return MOCK_CONDO_ADMIN_COMPANIES.find(cac => cac.adminUserEmail === email);
+};
+
+// For SuperAdmin to list all Condo Admin Companies
+export const getCondoAdminCompanies = async (): Promise<CondoAdminCompanyInfo[]> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    return [...MOCK_CONDO_ADMIN_COMPANIES].sort((a, b) => a.name.localeCompare(b.name));
+};
+
+export const addCondoAdminCompany = async (name: string, adminEmail: string, responsiblePerson?: string): Promise<CondoAdminCompanyInfo> => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    if (!name.trim() || !adminEmail.trim()) {
+        throw new Error("Nome da administradora e email do administrador são obrigatórios.");
+    }
+    if (MOCK_CONDO_ADMIN_COMPANIES.some(c => c.adminUserEmail === adminEmail)) {
+        throw new Error("Já existe uma administradora com este email.");
+    }
+    const newAdminCompany: CondoAdminCompanyInfo = {
+        id: `admincomp-${Date.now()}-${Math.random().toString(36).substring(2,7)}`,
+        name: name.trim(),
+        adminUserEmail: adminEmail.trim(),
+        responsiblePerson: responsiblePerson?.trim(),
+        companyRegistrationNumber: `XX.XXX.XXX/0001-XX (Novo)`
+    };
+    MOCK_CONDO_ADMIN_COMPANIES.push(newAdminCompany);
+    return { ...newAdminCompany };
+};
+
+
+// For CondoAdminCompany to list condominiums they manage, or for SuperAdmin to list condos of a selected AdminCompany
+export const getCondominiumsByManagingCompanyId = async (managingCompanyId: string): Promise<CondominiumInfo[]> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    return MOCK_CONDOMINIUMS.filter(condo => condo.managingCompanyId === managingCompanyId)
+                           .sort((a,b) => a.name.localeCompare(b.name));
+};
+
+// For individual CondominiumUser login (Síndico)
+export const getCondominiumById = async (condominiumId: string): Promise<CondominiumInfo | undefined> => {
+    await new Promise(resolve => setTimeout(resolve, 100)); 
+    const condo = MOCK_CONDOMINIUMS.find(c => c.id === condominiumId);
+    return condo ? { ...condo } : undefined;
+};
+
+// Add a new Condominium (Client) and associate it with a CondoAdminCompany
+export const addCondominiumClient = async (name: string, managingCompanyId: string): Promise<CondominiumInfo> => {
+    await new Promise(resolve => setTimeout(resolve, 500)); 
+    if (!name.trim()) {
+        throw new Error("O nome do condomínio não pode estar vazio.");
+    }
+    if (!MOCK_CONDO_ADMIN_COMPANIES.find(c => c.id === managingCompanyId)) {
+        throw new Error("Administradora de condomínio inválida.");
+    }
+
+    const newCondoId = `condo-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const newCondo: CondominiumInfo = {
+        id: newCondoId,
+        name: name.trim(),
+        managingCompanyId: managingCompanyId,
+        registrationDate: new Date().toISOString(),
+        pricePerM3: DEFAULT_PRICE_PER_M3, 
+        pricePerKWh: DEFAULT_PRICE_PER_KWH,
+        contactInfo: getDefaultContactInfo(),
+        contractDetails: getDefaultContractDetails(),
+        mqttConfig: getDefaultMqttConfig(newCondoId),
+        supportInfo: getDefaultSupportInfo(),
+    };
+    MOCK_CONDOMINIUMS.push(newCondo);
+    // Initialize mock data for the new condominium
+    ALL_MOCK_DATA.push(...generateMockDataForCondo(newCondo.id, 60, newCondo.pricePerM3));
+    initializeNewCondominiumMockData(newCondo.id, newCondo.name, newCondo.pricePerM3, newCondo.pricePerKWh); 
+    return { ...newCondo };
+};
+
+
+const initializeNewCondominiumMockData = (condoId: string, condoName: string, pricePerM3: number, pricePerKWh: number) => {
     MOCK_PUMP_STATUSES.push({
-        condominiumId: companyId,
+        condominiumId: condoId,
         pressurePSI: Math.floor(Math.random() * 30) + 30,
         isActive: Math.random() > 0.5,
         lastChanged: new Date().toISOString(),
     });
     MOCK_TANK_LEVELS.push({
-        condominiumId: companyId,
+        condominiumId: condoId,
         levelPercentage: Math.floor(Math.random() * 70) + 30,
         lastUpdated: new Date().toISOString(),
     });
     MOCK_TANK_LOCATIONS.push({
-        condominiumId: companyId,
-        latitude: -23.550520 + (Math.random() - 0.5) * 0.01 * (MOCK_COMPANIES.length),
-        longitude: -46.633308 + (Math.random() - 0.5) * 0.01 * (MOCK_COMPANIES.length),
-        address: `Rua Nova, ${100 + MOCK_COMPANIES.length * 50}, Bairro ${companyName.split(' ')[0]}, Cidade Exemplo`,
+        condominiumId: condoId,
+        latitude: -23.550520 + (Math.random() - 0.5) * 0.01 * (MOCK_CONDOMINIUMS.length),
+        longitude: -46.633308 + (Math.random() - 0.5) * 0.01 * (MOCK_CONDOMINIUMS.length),
+        address: `Rua Nova, ${100 + MOCK_CONDOMINIUMS.length * 50}, Bairro ${condoName.split(' ')[0]}, Cidade Exemplo`,
     });
-    generateMockTankLevelHistory(companyId); // Generate history for new company
+    generateMockTankLevelHistory(condoId, 'superior'); 
+    generateMockTankLevelHistory(condoId, 'inferior');
+    generateMockPressureHistory(condoId, 'concessionaire');
+    generateMockPressureHistory(condoId, 'internal');
+    generateMockPumpEnergyHistory(condoId, pricePerKWh);
 };
 
+// --- Existing Service Functions (may need adaptation or can be used as is) ---
 
-export const getCompanies = async (): Promise<CondominiumInfo[]> => {
-    await new Promise(resolve => setTimeout(resolve, 300)); 
-    return [...MOCK_COMPANIES].sort((a, b) => (a.name > b.name ? 1 : -1));
-};
-
-export const getCompanyById = async (companyId: string): Promise<CondominiumInfo | undefined> => {
-    await new Promise(resolve => setTimeout(resolve, 100)); 
-    return MOCK_COMPANIES.find(c => c.id === companyId);
-}
-
-export const addCompany = async (name: string): Promise<CondominiumInfo> => {
-    await new Promise(resolve => setTimeout(resolve, 500)); 
-    if (!name.trim()) {
-        throw new Error("O nome do condomínio não pode estar vazio.");
+export const updateCompanyDetails = async (companyId: string, updatedDetails: Partial<CondominiumInfo>): Promise<CondominiumInfo> => {
+    await new Promise(resolve => setTimeout(resolve, 700));
+    const companyIndex = MOCK_CONDOMINIUMS.findIndex(c => c.id === companyId);
+    if (companyIndex === -1) {
+        throw new Error("Condomínio não encontrado para atualização.");
     }
-    const newCompany: CondominiumInfo = {
-        id: `condo-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        name: name.trim(),
-        registrationDate: new Date().toISOString(),
-        pricePerM3: DEFAULT_PRICE_PER_M3, // Assign default price
+    const currentCompany = MOCK_CONDOMINIUMS[companyIndex];
+    const newDetails = {
+        ...currentCompany,
+        ...updatedDetails,
+        contactInfo: updatedDetails.contactInfo ? { ...currentCompany.contactInfo, ...updatedDetails.contactInfo } : currentCompany.contactInfo,
+        contractDetails: updatedDetails.contractDetails ? { ...currentCompany.contractDetails, ...updatedDetails.contractDetails } : currentCompany.contractDetails,
+        mqttConfig: updatedDetails.mqttConfig ? { ...currentCompany.mqttConfig, ...updatedDetails.mqttConfig } : currentCompany.mqttConfig,
+        supportInfo: updatedDetails.supportInfo ? { ...currentCompany.supportInfo, ...updatedDetails.supportInfo } : currentCompany.supportInfo,
     };
-    MOCK_COMPANIES.push(newCompany);
-    ALL_MOCK_DATA.push(...generateMockDataForCondo(newCompany.id, 60, newCompany.pricePerM3));
-    initializeNewCompanyMockData(newCompany.id, newCompany.name); 
-    return newCompany;
+
+    MOCK_CONDOMINIUMS[companyIndex] = newDetails;
+    return { ...MOCK_CONDOMINIUMS[companyIndex] };
 };
 
 
@@ -146,12 +421,11 @@ export const getMonthlyConsumptionTrend = async (condoId: string): Promise<Chart
   const condoSpecificData = ALL_MOCK_DATA.filter(r => r.condominiumId === condoId);
 
   const aggregatedByDay: { [key: string]: number } = {};
-  // Consider 90 days of data for trend, display last 30 distinct days
   const relevantData = condoSpecificData.filter(record => {
     const recordDate = new Date(record.date);
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    return recordDate >= ninetyDaysAgo;
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    return recordDate >= thirtyDaysAgo;
   });
 
   relevantData.forEach(record => {
@@ -168,7 +442,6 @@ export const getMonthlyConsumptionTrend = async (condoId: string): Promise<Chart
       fullDate: date 
     }))
     .sort((a, b) => new Date(a.fullDate).getTime() - new Date(b.fullDate).getTime())
-    .slice(-30) 
     .map(({name, value}) => ({name, value})); 
 };
 
@@ -228,8 +501,6 @@ export const getOverallMetrics = async (condoId: string): Promise<OverallMetrics
         }
     });
     
-    // Use number of days in the month up to today for average, if data exists.
-    // Otherwise, use number of days with data. If no data, use 1 to avoid division by zero.
     const effectiveDaysForAverage = daysInCurrentMonthData.size > 0 ? daysInCurrentMonthData.size : (new Date(currentYear, currentMonth + 1, 0).getDate());
     const averageDailyCurrentMonth = totalCurrentMonth / Math.max(1, effectiveDaysForAverage);
 
@@ -241,22 +512,38 @@ export const getOverallMetrics = async (condoId: string): Promise<OverallMetrics
         comparisonPercentage = 100; 
     }
 
+    const company = MOCK_CONDOMINIUMS.find(c => c.id === condoId);
+    const pricePerM3 = company ? company.pricePerM3 : DEFAULT_PRICE_PER_M3;
+    
+    const estimatedCurrentMonthWaterBill = totalCurrentMonth * pricePerM3;
+
+    let estimatedCurrentMonthPumpEnergyCost = 0;
+    const currentMonthPumpRecords = MOCK_PUMP_ENERGY_HISTORY.filter(r => {
+        const recordDate = new Date(r.date);
+        return r.condominiumId === condoId &&
+               recordDate.getMonth() === currentMonth &&
+               recordDate.getFullYear() === currentYear;
+    });
+    currentMonthPumpRecords.forEach(r => {
+        estimatedCurrentMonthPumpEnergyCost += r.cost;
+    });
+
     return {
         totalCurrentMonth: parseFloat(totalCurrentMonth.toFixed(2)),
         totalPreviousMonth: parseFloat(totalPreviousMonth.toFixed(2)),
         averageDailyCurrentMonth: parseFloat(averageDailyCurrentMonth.toFixed(2)),
         activeUnits: currentMonthUnits.size,
-        comparisonPercentage: parseFloat(comparisonPercentage.toFixed(1))
+        comparisonPercentage: parseFloat(comparisonPercentage.toFixed(1)),
+        estimatedCurrentMonthWaterBill: parseFloat(estimatedCurrentMonthWaterBill.toFixed(2)),
+        estimatedCurrentMonthPumpEnergyCost: parseFloat(estimatedCurrentMonthPumpEnergyCost.toFixed(2)),
     };
 };
 
-// --- New Service Functions for Extended Features ---
 
 export const getPumpStatus = async (condoId: string): Promise<PumpStatus> => {
-    await new Promise(resolve => setTimeout(resolve, 250)); // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 250)); 
     const status = MOCK_PUMP_STATUSES.find(p => p.condominiumId === condoId);
     if (!status) {
-        // Create a default if not found (e.g. for a newly added company not yet in mock)
         const newStatus = {
             condominiumId: condoId,
             pressurePSI: 40,
@@ -266,8 +553,6 @@ export const getPumpStatus = async (condoId: string): Promise<PumpStatus> => {
         MOCK_PUMP_STATUSES.push(newStatus);
         return newStatus;
     }
-    // Simulate some minor fluctuation if desired
-    // status.pressurePSI = Math.max(20, Math.min(70, status.pressurePSI + (Math.random() * 4 - 2)));
     return { ...status };
 };
 
@@ -283,8 +568,7 @@ export const getTankLevel = async (condoId: string): Promise<TankLevel> => {
         MOCK_TANK_LEVELS.push(newLevel);
         return newLevel;
     }
-    // Simulate some minor fluctuation
-    const newLevelPercentage = level.levelPercentage + (Math.random() * 10 - 5);
+    const newLevelPercentage = level.levelPercentage + (Math.random() * 2 - 1); 
     level.levelPercentage = Math.max(0, Math.min(100, parseFloat(newLevelPercentage.toFixed(1))));
     level.lastUpdated = new Date().toISOString();
     return { ...level };
@@ -307,27 +591,41 @@ export const getTankLocation = async (condoId: string): Promise<TankLocation> =>
 };
 
 export const setPumpActiveState = async (condoId: string, isActive: boolean): Promise<PumpStatus> => {
-    await new Promise(resolve => setTimeout(resolve, 600)); // Simulate action delay
+    await new Promise(resolve => setTimeout(resolve, 600)); 
     const statusIndex = MOCK_PUMP_STATUSES.findIndex(p => p.condominiumId === condoId);
     if (statusIndex === -1) {
-        throw new Error("Status da bomba não encontrado para este condomínio.");
+        throw new Error("Status da bomba não encontrado para este cliente.");
     }
     
     MOCK_PUMP_STATUSES[statusIndex] = {
         ...MOCK_PUMP_STATUSES[statusIndex],
         isActive: isActive,
         lastChanged: new Date().toISOString(),
-        // Optionally adjust pressure based on state change
         pressurePSI: isActive ? (Math.floor(Math.random() * 15) + 40) : (Math.floor(Math.random() * 10) + 5) 
     };
     return { ...MOCK_PUMP_STATUSES[statusIndex] };
 };
 
-// --- Service Functions for Reports Section ---
 
-export const getTankLevelHistory = async (condoId: string, startDate?: string, endDate?: string): Promise<ChartDataPoint[]> => {
+const formatChartData = (records: {date: string, value: number}[], maxPoints = 300): ChartDataPoint[] => {
+    
+    records.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    if (records.length > maxPoints) {
+        records = records.slice(-maxPoints);
+    }
+
+    return records.map(record => ({
+        name: new Date(record.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }),
+        value: record.value,
+        fullDate: record.date, 
+    }));
+}
+
+
+export const getTankLevelHistory = async (condoId: string, tankType: 'superior' | 'inferior', startDate?: string, endDate?: string): Promise<ChartDataPoint[]> => {
     await new Promise(resolve => setTimeout(resolve, 450));
-    let filteredHistory = MOCK_TANK_LEVEL_HISTORY.filter(r => r.condominiumId === condoId);
+    let filteredHistory = MOCK_TANK_LEVEL_HISTORY.filter(r => r.condominiumId === condoId && r.tankType === tankType);
 
     if (startDate) {
         const start = new Date(startDate).getTime();
@@ -338,21 +636,34 @@ export const getTankLevelHistory = async (condoId: string, startDate?: string, e
         filteredHistory = filteredHistory.filter(r => new Date(r.date).getTime() <= end);
     }
     
-    // Sort by date ascending
-    filteredHistory.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    // If too many points, consider downsampling or taking latest N points. For now, take up to 300 latest.
-    const maxPoints = 300;
-    if (filteredHistory.length > maxPoints) {
-        filteredHistory = filteredHistory.slice(-maxPoints);
-    }
-
-    return filteredHistory.map(record => ({
-        name: new Date(record.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }),
-        value: record.levelPercentage,
-        fullDate: record.date, // for potential detailed tooltips or sorting
-    }));
+    return formatChartData(filteredHistory.map(r => ({date: r.date, value: r.levelPercentage})));
 };
+
+export const getConcessionairePressureHistory = async (condoId: string, startDate?: string, endDate?: string): Promise<ChartDataPoint[]> => {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    let filteredHistory = MOCK_CONCESSIONAIRE_NETWORK_PRESSURE_HISTORY.filter(r => r.condominiumId === condoId);
+    
+    return formatChartData(filteredHistory.map(r => ({date: r.date, value: r.pressurePSI})));
+};
+
+export const getInternalPressureHistory = async (condoId: string, startDate?: string, endDate?: string): Promise<ChartDataPoint[]> => {
+    await new Promise(resolve => setTimeout(resolve, 420));
+    let filteredHistory = MOCK_INTERNAL_NETWORK_PRESSURE_HISTORY.filter(r => r.condominiumId === condoId);
+    
+    return formatChartData(filteredHistory.map(r => ({date: r.date, value: r.pressurePSI})));
+};
+
+export const getPumpEnergyHistory = async (condoId: string, dataType: 'kwh' | 'cost', startDate?: string, endDate?: string): Promise<ChartDataPoint[]> => {
+    await new Promise(resolve => setTimeout(resolve, 480));
+    let filteredHistory = MOCK_PUMP_ENERGY_HISTORY.filter(r => r.condominiumId === condoId);
+    
+    const mappedData = filteredHistory.map(r => ({
+        date: r.date,
+        value: dataType === 'kwh' ? r.energyKWh : r.cost
+    }));
+    return formatChartData(mappedData);
+};
+
 
 export const getFinancialSummary = async (
     condoId: string, 
@@ -361,7 +672,7 @@ export const getFinancialSummary = async (
     await new Promise(resolve => setTimeout(resolve, 550));
     
     const condoSpecificData = ALL_MOCK_DATA.filter(r => r.condominiumId === condoId);
-    const monthlyCosts: { [key: string]: number } = {}; // key: "YYYY-MM"
+    const monthlyCosts: { [key: string]: number } = {}; 
 
     const today = new Date();
     let monthsToConsider = 0;
@@ -373,15 +684,15 @@ export const getFinancialSummary = async (
         const targetDate = new Date(today);
         targetDate.setMonth(today.getMonth() - i);
         const year = targetDate.getFullYear();
-        const month = targetDate.getMonth(); // 0-indexed
+        const month = targetDate.getMonth(); 
         const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
-        monthlyCosts[monthKey] = 0; // Initialize month
+        monthlyCosts[monthKey] = 0; 
     }
     
     condoSpecificData.forEach(record => {
         const recordDate = new Date(record.date);
         const year = recordDate.getFullYear();
-        const month = recordDate.getMonth(); // 0-indexed
+        const month = recordDate.getMonth(); 
         const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
         if (monthlyCosts.hasOwnProperty(monthKey)) {
@@ -396,9 +707,27 @@ export const getFinancialSummary = async (
             return {
                 name: dateFromName.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
                 value: parseFloat(totalCost.toFixed(2)),
-                fullDateSort: monthKey // For sorting
+                fullDateSort: monthKey 
             }
         })
-        .sort((a, b) => a.fullDateSort.localeCompare(b.fullDateSort)) // Sort chronologically
-        .map(({name, value}) => ({name, value})); // Remove fullDateSort
+        .sort((a, b) => a.fullDateSort.localeCompare(b.fullDateSort)) 
+        .map(({name, value}) => ({name, value})); 
+};
+
+// Legacy getCompanies, now effectively getCondominiumsByManagingCompanyId if managingCompanyId is provided.
+// Or, if used without a managingCompanyId (e.g. by a superAdmin to see ALL condos, not typical for this function's original intent)
+// This function needs to be re-evaluated in the context of App.tsx logic.
+// For now, this is a placeholder. The App.tsx will call more specific functions.
+export const getCompanies = async (): Promise<CondominiumInfo[]> => {
+    await new Promise(resolve => setTimeout(resolve, 300)); 
+    return [...MOCK_CONDOMINIUMS].sort((a, b) => (a.name > b.name ? 1 : -1));
+};
+
+// Legacy addCompany, now effectively addCondominiumClient if managingCompanyId is provided.
+// This function needs to be re-evaluated. App.tsx will call more specific functions.
+export const addCompany = async (name: string): Promise<CondominiumInfo> => {
+    // This is a simplified version. The new addCondominiumClient should be used with a managingCompanyId.
+    // For now, let's assume it adds to a default or first admin company for legacy compatibility if called directly.
+    const defaultManagingCompanyId = MOCK_CONDO_ADMIN_COMPANIES[0]?.id || 'admincomp-error';
+    return addCondominiumClient(name, defaultManagingCompanyId);
 };

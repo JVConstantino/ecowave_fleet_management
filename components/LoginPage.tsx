@@ -4,23 +4,54 @@ import SimpleNav from './SimpleNav';
 import Button from './ui/Button';
 import Card from './ui/Card';
 import { APP_NAME } from '../constants';
+import { UserRole } from '../types'; // Import UserRole
 
 interface LoginPageProps {
-  onLogin: (identifier: string, pass: string, role: 'admin' | 'condominium') => void;
+  onLogin: (identifier: string, pass: string, role: Exclude<UserRole, null>) => void; // Role cannot be null here
   onNavigateToHome: () => void;
   loginError: string | null;
   isLoading: boolean;
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToHome, loginError, isLoading }) => {
-  const [identifier, setIdentifier] = useState(''); // Email for admin, Condo ID for condo
+  const [identifier, setIdentifier] = useState(''); // Email or Condo ID
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'admin' | 'condominium'>('condominium');
+  const [role, setRole] = useState<Exclude<UserRole, null>>('condominiumUser'); // Default to condominiumUser
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onLogin(identifier, password, role);
   };
+
+  const getIdentifierLabel = () => {
+    switch (role) {
+      case 'superAdmin':
+        return 'Email do Super Administrador';
+      case 'condoAdminCompany':
+        return 'Email da Administradora';
+      case 'condominiumUser':
+        return 'ID do Cliente/Condomínio';
+      default:
+        return 'Identificador';
+    }
+  };
+  
+  const getIdentifierPlaceholder = () => {
+     switch (role) {
+      case 'superAdmin':
+        return 'superadmin@exemplo.com';
+      case 'condoAdminCompany':
+        return 'admin@suaadministradora.com';
+      case 'condominiumUser':
+        return 'Ex: cliente-123 ou apto-101';
+      default:
+        return 'Seu identificador';
+    }
+  };
+
+  const getIdentifierType = () => {
+    return (role === 'superAdmin' || role === 'condoAdminCompany') ? 'email' : 'text';
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-100 via-indigo-50 to-sky-100">
@@ -36,25 +67,30 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToHome, loginE
               <select
                 id="role-select"
                 value={role}
-                onChange={(e) => setRole(e.target.value as 'admin' | 'condominium')}
+                onChange={(e) => {
+                    setRole(e.target.value as Exclude<UserRole, null>);
+                    setIdentifier(''); // Clear identifier on role change
+                    setPassword('');
+                }}
                 className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
               >
-                <option value="condominium">Cliente / Unidade</option> 
-                <option value="admin">Administrador</option>
+                <option value="condominiumUser">Síndico / Cliente</option> 
+                <option value="condoAdminCompany">Administradora de Condomínio</option>
+                <option value="superAdmin">Super Administrador</option>
               </select>
             </div>
 
             <div>
               <label htmlFor="identifier" className="block text-sm font-medium text-gray-700">
-                {role === 'admin' ? 'Email' : 'ID do Cliente/Unidade'}
+                {getIdentifierLabel()}
               </label>
               <input
-                type={role === 'admin' ? 'email' : 'text'}
+                type={getIdentifierType()}
                 id="identifier"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 required
-                placeholder={role === 'admin' ? 'seuemail@exemplo.com' : 'Ex: cliente-123'}
+                placeholder={getIdentifierPlaceholder()}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               />
             </div>

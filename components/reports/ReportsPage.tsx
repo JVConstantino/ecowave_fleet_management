@@ -3,47 +3,107 @@ import React from 'react';
 import { CondominiumInfo, UserRole, ChartDataPoint } from '../../types';
 import Card from '../ui/Card';
 import Spinner from '../ui/Spinner';
-import ConsumptionChart from '../ConsumptionChart'; // Re-use for financial/tank level charts
-import { getTankLevelHistory, getFinancialSummary } from '../../services/waterDataService';
+import ConsumptionChart from '../ConsumptionChart'; 
+import { 
+    getTankLevelHistory, 
+    getFinancialSummary,
+    getConcessionairePressureHistory,
+    getInternalPressureHistory,
+    getPumpEnergyHistory
+} from '../../services/waterDataService';
 
 interface ReportsPageProps {
-  selectedCondominium: CondominiumInfo; // Type remains, but represents a client
+  selectedCondominium: CondominiumInfo; 
   userRole: UserRole;
 }
 
 const ReportsPage: React.FC<ReportsPageProps> = ({ selectedCondominium, userRole }) => {
-  const [tankHistoryData, setTankHistoryData] = React.useState<ChartDataPoint[]>([]);
-  const [financialData, setFinancialData] = React.useState<ChartDataPoint[]>([]);
-  const [isLoadingTankHistory, setIsLoadingTankHistory] = React.useState(true);
-  const [isLoadingFinancial, setIsLoadingFinancial] = React.useState(true);
+  const [superiorTankHistoryData, setSuperiorTankHistoryData] = React.useState<ChartDataPoint[]>([]);
+  const [inferiorTankHistoryData, setInferiorTankHistoryData] = React.useState<ChartDataPoint[]>([]);
+  const [waterFinancialData, setWaterFinancialData] = React.useState<ChartDataPoint[]>([]);
+  const [concessionairePressureData, setConcessionairePressureData] = React.useState<ChartDataPoint[]>([]);
+  const [internalPressureData, setInternalPressureData] = React.useState<ChartDataPoint[]>([]);
+  const [pumpEnergyKWhData, setPumpEnergyKWhData] = React.useState<ChartDataPoint[]>([]);
+  const [pumpEnergyCostData, setPumpEnergyCostData] = React.useState<ChartDataPoint[]>([]);
+  
+  const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const fetchReportData = async () => {
       if (!selectedCondominium) return;
       
-      setIsLoadingTankHistory(true);
-      setIsLoadingFinancial(true);
+      setIsLoading(true);
       setError(null);
 
       try {
-        const [tankData, finData] = await Promise.all([
-          getTankLevelHistory(selectedCondominium.id),
-          getFinancialSummary(selectedCondominium.id, 'last6Months')
+        const [
+            superiorTankData,
+            inferiorTankData,
+            finData,
+            concessionairePressure,
+            internalPressure,
+            pumpKWh,
+            pumpCost
+        ] = await Promise.all([
+          getTankLevelHistory(selectedCondominium.id, 'superior'),
+          getTankLevelHistory(selectedCondominium.id, 'inferior'),
+          getFinancialSummary(selectedCondominium.id, 'last6Months'),
+          getConcessionairePressureHistory(selectedCondominium.id),
+          getInternalPressureHistory(selectedCondominium.id),
+          getPumpEnergyHistory(selectedCondominium.id, 'kwh'),
+          getPumpEnergyHistory(selectedCondominium.id, 'cost')
         ]);
-        setTankHistoryData(tankData);
-        setFinancialData(finData);
+        setSuperiorTankHistoryData(superiorTankData);
+        setInferiorTankHistoryData(inferiorTankData);
+        setWaterFinancialData(finData);
+        setConcessionairePressureData(concessionairePressure);
+        setInternalPressureData(internalPressure);
+        setPumpEnergyKWhData(pumpKWh);
+        setPumpEnergyCostData(pumpCost);
+
       } catch (err) {
         console.error("Failed to load report data:", err);
         setError("Falha ao carregar dados para os relatórios. Tente novamente mais tarde.");
       } finally {
-        setIsLoadingTankHistory(false);
-        setIsLoadingFinancial(false);
+        setIsLoading(false);
       }
     };
 
     fetchReportData();
   }, [selectedCondominium]);
+
+  const renderChart = (
+    title: string, 
+    data: ChartDataPoint[], 
+    chartIsLoading: boolean, 
+    yAxisLabel: string, 
+    tooltipSuffix: string, 
+    tooltipPrefix: string = "",
+    seriesName: string,
+    color: string,
+    chartType: 'line' | 'bar' = 'line'
+  ) => (
+    <Card title={title}> 
+      {chartIsLoading ? (
+        <div className="flex justify-center items-center h-64"><Spinner size="lg"/></div>
+      ) : data.length > 0 ? (
+        <ConsumptionChart 
+          data={data} 
+          type={chartType}
+          color={color} 
+          yAxisLabel={yAxisLabel}
+          tooltipValueSuffix={tooltipSuffix}
+          tooltipValuePrefix={tooltipPrefix}
+          tooltipLegendName={seriesName.split(" ")[0]} // e.g. "Nível" from "Nível do Reservatório"
+          seriesName={seriesName}
+        />
+      ) : (
+        <p className="text-gray-500 text-center py-4">Sem dados disponíveis para este relatório.</p>
+      )}
+    </Card>
+  );
+
 
   return (
     <div className="space-y-8">
@@ -51,64 +111,32 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ selectedCondominium, userRole
         Central de Relatórios: {selectedCondominium.name}
       </h2>
 
-      {error && (
+      {error && !isLoading && ( // Show general error if not loading individual charts
         <Card className="bg-red-50 border-red-200">
           <p className="text-red-700">{error}</p>
         </Card>
       )}
 
-      <Card title="Histórico do Nível do Reservatório (Últimos Pontos)"> 
-        {isLoadingTankHistory ? (
-          <div className="flex justify-center items-center h-64"><Spinner size="lg"/></div>
-        ) : tankHistoryData.length > 0 ? (
-          <ConsumptionChart 
-            data={tankHistoryData} 
-            type="line"
-            dataKey="value"
-            xAxisDataKey="name"
-            color="#8884d8" 
-            yAxisLabel="Nível (%)"
-            tooltipValueSuffix=" %"
-            tooltipLegendName="Nível"
-            seriesName="Nível do Reservatório"
-          />
-        ) : (
-          <p className="text-gray-500 text-center py-4">Sem dados de histórico de nível disponíveis.</p>
-        )}
-      </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {renderChart("Nível do Reservatório Superior", superiorTankHistoryData, isLoading, "Nível (%)", " %", "", "Nível Superior", "#3b82f6")}
+        {renderChart("Nível do Reservatório Inferior", inferiorTankHistoryData, isLoading, "Nível (%)", " %", "", "Nível Inferior", "#10b981")}
+        
+        {renderChart("Pressão da Rede da Concessionária", concessionairePressureData, isLoading, "Pressão (PSI)", " PSI", "", "Pressão Concessionária", "#ef4444")}
+        {renderChart("Pressão da Rede Interna", internalPressureData, isLoading, "Pressão (PSI)", " PSI", "", "Pressão Interna", "#f97316")}
 
-      <Card title="Resumo Financeiro (Últimos 6 Meses)">
-        {isLoadingFinancial ? (
-          <div className="flex justify-center items-center h-64"><Spinner size="lg"/></div>
-        ) : financialData.length > 0 ? (
-          <ConsumptionChart 
-            data={financialData} 
-            type="bar" 
-            dataKey="value"
-            xAxisDataKey="name"
-            color="#82ca9d" 
-            yAxisLabel="Custo (R$)"
-            tooltipValuePrefix="R$ "
-            tooltipValueSuffix=""
-            tooltipLegendName="Custo"
-            seriesName="Custo Mensal"
-          />
-        ) : (
-          <p className="text-gray-500 text-center py-4">Sem dados financeiros disponíveis.</p>
-        )}
-      </Card>
+        {renderChart("Consumo de Energia da Bomba (KWh)", pumpEnergyKWhData, isLoading, "Energia (KWh)", " KWh", "", "Energia Bomba", "#8b5cf6", "bar")}
+        {renderChart("Custo de Energia da Bomba (R$)", pumpEnergyCostData, isLoading, "Custo (R$)", "", "R$ ", "Custo Bomba", "#d946ef", "bar")}
+        
+        {renderChart("Custo de Água (Últimos 6 Meses)", waterFinancialData, isLoading, "Custo (R$)", "", "R$ ", "Custo Água", "#06b6d4", "bar")}
+      </div>
       
-      <Card title="Outros Relatórios">
-        <p className="text-gray-600">
-          Mais relatórios e visualizações detalhadas estarão disponíveis em breve, incluindo:
-        </p>
-        <ul className="list-disc list-inside text-gray-500 mt-3 space-y-1">
-          <li>Comparativos de consumo/desempenho entre diferentes períodos.</li>
-          <li>Análise por unidade/veículo com filtros de data.</li>
-          <li>Picos de consumo/eventos e alertas.</li>
-          <li>Relatório de acionamento de recursos.</li>
+      <Card title="Mais Informações">
+        <ul className="list-disc list-inside text-gray-500 mt-3 space-y-1 text-sm">
+          <li>Os gráficos de histórico exibem os últimos pontos de dados disponíveis (até 300 pontos).</li>
+          <li>O custo de água é baseado no consumo total e no preço por m³ configurado para este cliente.</li>
+          <li>O custo de energia da bomba é baseado no consumo em KWh e no preço por KWh configurado.</li>
         </ul>
-        {userRole === 'admin' && (
+        { (userRole === 'superAdmin' || userRole === 'condoAdminCompany') && (
             <p className="mt-4 text-sm text-gray-500 italic">
                 Administrador visualizando relatórios para: {selectedCondominium.name} (ID: {selectedCondominium.id})
             </p>

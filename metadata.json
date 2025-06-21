@@ -1,6 +1,6 @@
-
 {
   "name": "Eco Wave Fleet Management",
   "description": "A web application for monitoring condominium water consumption, providing insights and saving tips using Gemini API. It helps users track water usage, view trends, and get AI-powered recommendations.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "prompt": ""
 }

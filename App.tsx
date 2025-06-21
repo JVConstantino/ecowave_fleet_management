@@ -5,7 +5,11 @@ import DashboardMetrics from './components/DashboardMetrics';
 import ConsumptionChart from './components/ConsumptionChart';
 import UnitBreakdownChart from './components/UnitBreakdownChart';
 import GeminiAnalysisCard from './components/GeminiAnalysisCard';
-import AdminCompanyManagement from './components/admin/AdminCompanyManagement';
+// Admin/Management Components
+import SuperAdminManagement from './components/admin/SuperAdminManagement'; // New: Manages CondoAdminCompanies
+import CondominiumManagement from './components/admin/AdminCompanyManagement'; // Corrected import path
+import ClientDetailsManagementPage from './components/admin/ClientDetailsManagementPage';
+
 import Card from './components/ui/Card';
 import Spinner from './components/ui/Spinner';
 import Button from './components/ui/Button';
@@ -15,32 +19,49 @@ import Sidebar, { AuthenticatedAppView } from './components/Sidebar';
 import PumpStatusCard from './components/dashboard/PumpStatusCard';
 import TankLevelCard from './components/dashboard/TankLevelCard';
 import TankLocationMapCard from './components/dashboard/TankLocationMapCard';
+import EnvironmentDataChart from './components/dashboard/EnvironmentDataChart';
 import ReportsPage from './components/reports/ReportsPage'; 
 
 import { 
     OverallMetrics, 
     ChartDataPoint, 
     CondominiumInfo, 
+    CondoAdminCompanyInfo, // New
+    SuperAdminUserInfo, // New
     UserRole, 
     AuthenticatedUser, 
-    AdminUserInfo,
     PumpStatus,
     TankLevel,
     TankLocation
 } from './types';
 import { 
+    // Authentication
+    authenticateSuperAdmin, // New
+    authenticateCondoAdminCompany, // New
+    // Data Getters
     getOverallMetrics, 
     getMonthlyConsumptionTrend, 
     getUnitBreakdownCurrentMonth, 
-    getCompanyById,
+    getCondominiumById, // For condominiumUser login & general lookup
+    getCondominiumsByManagingCompanyId, // For CondoAdminCompany and SuperAdmin context
+    // updateCompanyDetails, // Renamed to updateCondominiumDetails
+    updateCompanyDetails as updateCondominiumDetails, // Alias for clarity
     getPumpStatus,
     getTankLevel,
     getTankLocation,
-    setPumpActiveState
+    setPumpActiveState,
 } from './services/waterDataService';
-import { APP_NAME, MOCK_ADMIN_EMAIL, MOCK_ADMIN_PASSWORD, MOCK_CONDO_PASSWORD } from './constants';
+import { fetchTemperatureHumidityData } from './services/thingSpeakService';
+import { 
+    MOCK_SUPER_ADMIN_EMAIL, MOCK_SUPER_ADMIN_PASSWORD,
+    MOCK_CONDO_ADMIN_COMPANY_EMAIL_1, MOCK_CONDO_ADMIN_COMPANY_PASSWORD_1,
+    MOCK_CONDO_ADMIN_COMPANY_EMAIL_2, MOCK_CONDO_ADMIN_COMPANY_PASSWORD_2,
+    MOCK_ADMIN_EMAIL, MOCK_ADMIN_PASSWORD, // Legacy admin, now treated as a CondoAdminCompany
+    MOCK_CONDO_PASSWORD 
+} from './constants';
 
 type AppScreen = 'home' | 'login' | 'authenticatedApp';
+// ExtendedAuthenticatedAppView is now AuthenticatedAppView from Sidebar.tsx
 
 const RefreshIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-5 h-5 ${className}`}>
@@ -62,8 +83,10 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoginLoading, setIsLoginLoading] = useState<boolean>(false);
 
-  const [authenticatedAppView, setAuthenticatedAppView] = useState<AuthenticatedAppView>('admin'); 
-  const [selectedCondominium, setSelectedCondominium] = useState<CondominiumInfo | null>(null); // Renaming this var later might be good if "Condominium" changes
+  const [authenticatedAppView, setAuthenticatedAppView] = useState<AuthenticatedAppView>('superAdminManagement'); 
+  const [selectedAdminCompany, setSelectedAdminCompany] = useState<CondoAdminCompanyInfo | null>(null); // For SuperAdmin selecting an AdminCompany
+  const [selectedCondominium, setSelectedCondominium] = useState<CondominiumInfo | null>(null); 
+  
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true); 
   
   // Dashboard Data States
@@ -73,9 +96,11 @@ const App: React.FC = () => {
   const [pumpStatus, setPumpStatus] = useState<PumpStatus | null>(null);
   const [tankLevel, setTankLevel] = useState<TankLevel | null>(null);
   const [tankLocation, setTankLocation] = useState<TankLocation | null>(null);
+  const [environmentData, setEnvironmentData] = useState<ChartDataPoint[]>([]);
   
   const [isLoadingDashboardData, setIsLoadingDashboardData] = useState<boolean>(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [environmentDataError, setEnvironmentDataError] = useState<string | null>(null);
   const [isTogglingPump, setIsTogglingPump] = useState<boolean>(false);
 
 
@@ -86,138 +111,211 @@ const App: React.FC = () => {
     setPumpStatus(null);
     setTankLevel(null);
     setTankLocation(null);
+    setEnvironmentData([]);
     setDashboardError(null);
+    setEnvironmentDataError(null);
   }, []);
 
-  const fetchDashboardData = useCallback(async (clientId: string) => { // Renamed condominiumId to clientId for clarity
-    if (!clientId) return;
+  const resetSelections = useCallback(() => {
+    setSelectedAdminCompany(null);
+    setSelectedCondominium(null);
+    clearDashboardData();
+  }, [clearDashboardData]);
 
+  const fetchDashboardDataForCondo = useCallback(async (condoId: string) => { 
+    if (!condoId) return;
     setIsLoadingDashboardData(true);
     clearDashboardData(); 
     setDashboardError(null); 
+    setEnvironmentDataError(null);
     try {
-      const [
-        metricsData, 
-        trendData, 
-        breakdownData,
-        pumpStatusData,
-        tankLevelData,
-        tankLocationData
-      ] = await Promise.all([
-        getOverallMetrics(clientId),
-        getMonthlyConsumptionTrend(clientId),
-        getUnitBreakdownCurrentMonth(clientId),
-        getPumpStatus(clientId),
-        getTankLevel(clientId),
-        getTankLocation(clientId),
-      ]);
+      const coreDataPromises = [
+        getOverallMetrics(condoId),
+        getMonthlyConsumptionTrend(condoId),
+        getUnitBreakdownCurrentMonth(condoId),
+        getPumpStatus(condoId),
+        getTankLevel(condoId),
+        getTankLocation(condoId),
+      ];
+      let thingSpeakPromise = fetchTemperatureHumidityData().catch(err => {
+        console.error(`Failed to fetch ThingSpeak data:`, err);
+        setEnvironmentDataError("Falha ao carregar dados de temperatura e umidade.");
+        return [];
+      });
       
-      setMetrics(metricsData);
-      setMonthlyTrend(trendData);
-      setUnitBreakdown(breakdownData);
-      setPumpStatus(pumpStatusData);
-      setTankLevel(tankLevelData);
-      setTankLocation(tankLocationData);
+      const [
+        metricsData, trendData, breakdownData, pumpData, tankData, locationData
+      ] = await Promise.all(coreDataPromises);
+      
+      setMetrics(metricsData as OverallMetrics);
+      setMonthlyTrend(trendData as ChartDataPoint[]);
+      setUnitBreakdown(breakdownData as ChartDataPoint[]);
+      setPumpStatus(pumpData as PumpStatus);
+      setTankLevel(tankData as TankLevel);
+      setTankLocation(locationData as TankLocation);
+
+      const envData = await thingSpeakPromise;
+      setEnvironmentData(envData);
 
     } catch (err) {
-      console.error(`Failed to fetch dashboard data for ${clientId}:`, err);
-      setDashboardError("Não foi possível carregar todos os dados do painel. Verifique sua conexão e tente novamente.");
+      console.error(`Failed to fetch dashboard data for ${condoId}:`, err);
+      setDashboardError("Não foi possível carregar os dados do painel. Tente novamente.");
     } finally {
       setIsLoadingDashboardData(false);
     }
   }, [clearDashboardData]);
 
-  const handleLogin = useCallback(async (identifier: string, pass: string, role: 'admin' | 'condominium') => { // 'condominium' role here means client/unit
+  const handleLogin = useCallback(async (identifier: string, pass: string, role: Exclude<UserRole, null>) => { 
     setIsLoginLoading(true);
     setLoginError(null);
     await new Promise(resolve => setTimeout(resolve, 500)); 
 
-    if (role === 'admin') {
-      if (identifier === MOCK_ADMIN_EMAIL && pass === MOCK_ADMIN_PASSWORD) {
-        const adminUser: AdminUserInfo = { id: 'admin001', name: 'Administrador', type: 'admin' };
-        setIsAuthenticated(true);
-        setUserRole('admin');
-        setLoggedInUser(adminUser);
-        setAuthenticatedAppView('admin'); 
-        setSelectedCondominium(null); 
-        clearDashboardData();
-        setAppScreen('authenticatedApp');
-      } else {
-        setLoginError('Credenciais de administrador inválidas.');
-      }
-    } else if (role === 'condominium') { // This is client/unit login
-      const client = await getCompanyById(identifier); // Assuming getCompanyById finds a "client"
-      if (client && pass === MOCK_CONDO_PASSWORD) {
-        setIsAuthenticated(true);
-        setUserRole('condominium'); // This role represents a client/unit user
-        setLoggedInUser(client);
-        setSelectedCondominium(client); 
-        setAuthenticatedAppView('dashboard'); 
-        fetchDashboardData(client.id);
-        setAppScreen('authenticatedApp');
-      } else {
-        setLoginError('ID do Cliente/Unidade ou senha inválidos.');
-      }
+    try {
+        let user: AuthenticatedUser = null;
+        if (role === 'superAdmin') {
+            // Check against updated Super Admin credentials from constants.ts
+            if (identifier === MOCK_SUPER_ADMIN_EMAIL && pass === MOCK_SUPER_ADMIN_PASSWORD) {
+                user = await authenticateSuperAdmin(identifier);
+            }
+        } else if (role === 'condoAdminCompany') {
+             // Check against updated Condo Admin Company credentials from constants.ts
+             if (
+                (identifier === MOCK_CONDO_ADMIN_COMPANY_EMAIL_1 && pass === MOCK_CONDO_ADMIN_COMPANY_PASSWORD_1) ||
+                (identifier === MOCK_CONDO_ADMIN_COMPANY_EMAIL_2 && pass === MOCK_CONDO_ADMIN_COMPANY_PASSWORD_2) ||
+                (identifier === MOCK_ADMIN_EMAIL && pass === MOCK_ADMIN_PASSWORD) // Legacy admin still works with its defined consts
+            ) {
+                 user = await authenticateCondoAdminCompany(identifier);
+             }
+        } else if (role === 'condominiumUser') {
+            // Check against Condominium ID (which can be 'condominio01@gmail.com') 
+            // and the updated MOCK_CONDO_PASSWORD from constants.ts
+            const condo = await getCondominiumById(identifier);
+            if (condo && pass === MOCK_CONDO_PASSWORD) {
+                user = condo;
+            }
+        }
+
+        if (user) {
+            setIsAuthenticated(true);
+            setUserRole(role);
+            setLoggedInUser(user);
+            resetSelections(); // Clear selections from previous sessions
+
+            if (role === 'superAdmin') {
+                setAuthenticatedAppView('superAdminManagement');
+            } else if (role === 'condoAdminCompany') {
+                setSelectedAdminCompany(user as CondoAdminCompanyInfo); // Set context for this admin company
+                setAuthenticatedAppView('condominiumManagement');
+            } else if (role === 'condominiumUser') {
+                setSelectedCondominium(user as CondominiumInfo);
+                setAuthenticatedAppView('dashboard');
+                fetchDashboardDataForCondo((user as CondominiumInfo).id);
+            }
+            setAppScreen('authenticatedApp');
+        } else {
+            setLoginError('Credenciais inválidas ou usuário não encontrado.');
+        }
+    } catch (err) {
+        console.error("Login error:", err);
+        setLoginError("Ocorreu um erro durante o login.");
+    } finally {
+        setIsLoginLoading(false);
     }
-    setIsLoginLoading(false);
-  }, [fetchDashboardData, clearDashboardData]);
+  }, [resetSelections, fetchDashboardDataForCondo]);
 
   const handleLogout = useCallback(() => {
     setIsAuthenticated(false);
     setUserRole(null);
     setLoggedInUser(null);
-    setSelectedCondominium(null);
-    clearDashboardData();
+    resetSelections();
     setAppScreen('login'); 
-  }, [clearDashboardData]);
+  }, [resetSelections]);
 
   const navigateToLogin = useCallback(() => setAppScreen('login'), []);
   const navigateToHome = useCallback(() => setAppScreen('home'), []);
 
-  const handleViewClientDashboardFromAdmin = useCallback((client: CondominiumInfo) => { 
-    if (userRole !== 'admin') return; 
-    setSelectedCondominium(client);
-    setAuthenticatedAppView('dashboard');
-    fetchDashboardData(client.id);
-  }, [userRole, fetchDashboardData]);
-
-  const handleBackToAdminPanel = () => { 
-    if (userRole !== 'admin') return;
-    setAuthenticatedAppView('admin');
+  // --- Navigation Handlers for Authenticated Views ---
+  const handleNavigateToSuperAdminManagement = () => {
+    if (userRole === 'superAdmin') {
+      setAuthenticatedAppView('superAdminManagement');
+      resetSelections(); // Clear admin company and condo selections
+    }
   };
 
-  const handleNavigateToDashboardView = () => {
-    if (userRole === 'condominium' && loggedInUser && 'id' in loggedInUser) { // Client/Unit user
-        if (selectedCondominium?.id !== loggedInUser.id || authenticatedAppView !== 'dashboard') {
-            setSelectedCondominium(loggedInUser as CondominiumInfo); 
-            setAuthenticatedAppView('dashboard');
-            fetchDashboardData(loggedInUser.id);
-        } else if (authenticatedAppView === 'dashboard') { 
-            fetchDashboardData(loggedInUser.id);
-        }
-    } else if (userRole === 'admin' && selectedCondominium) {
-        if (authenticatedAppView !== 'dashboard') {
-           setAuthenticatedAppView('dashboard');
-        }
-        fetchDashboardData(selectedCondominium.id);
+  const handleNavigateToCondominiumManagement = () => {
+    if (userRole === 'superAdmin' && selectedAdminCompany) {
+        setAuthenticatedAppView('condominiumManagement');
+        setSelectedCondominium(null); // Clear condo selection when viewing list of condos for an admin company
+    } else if (userRole === 'condoAdminCompany') {
+        // loggedInUser should be CondoAdminCompanyInfo
+        setSelectedAdminCompany(loggedInUser as CondoAdminCompanyInfo);
+        setAuthenticatedAppView('condominiumManagement');
+        setSelectedCondominium(null); 
     }
   };
   
-  const handleNavigateToReportsView = useCallback(() => {
-    if (userRole === 'condominium' && loggedInUser && 'id' in loggedInUser) { // Client/Unit user
+  // SuperAdmin selects a CondoAdminCompany from the SuperAdminManagement view
+  const handleSelectAdminCompanyFromSuperAdmin = (adminCompany: CondoAdminCompanyInfo) => {
+    if (userRole === 'superAdmin') {
+      setSelectedAdminCompany(adminCompany);
+      setAuthenticatedAppView('condominiumManagement'); // Show condos for this admin company
+      setSelectedCondominium(null); // Clear any previously selected condo
+      clearDashboardData();
+    }
+  };
+
+  // CondoAdminCompany or SuperAdmin (with selectedAdminCompany) selects a Condominium
+  const handleSelectCondominium = (condominium: CondominiumInfo) => {
+    setSelectedCondominium(condominium);
+    setAuthenticatedAppView('dashboard'); // Default to dashboard
+    fetchDashboardDataForCondo(condominium.id);
+  };
+  
+  const handleManageCondominiumDetails = (condominium: CondominiumInfo) => {
+    setSelectedCondominium(condominium);
+    setAuthenticatedAppView('clientDetails');
+  };
+  
+  const handleNavigateToDashboardView = () => {
+    if (selectedCondominium) {
+        setAuthenticatedAppView('dashboard');
+        fetchDashboardDataForCondo(selectedCondominium.id); // Re-fetch or ensure data is current
+    } else if (userRole === 'condominiumUser' && loggedInUser) { // Direct login as condo user
+        setSelectedCondominium(loggedInUser as CondominiumInfo);
+        setAuthenticatedAppView('dashboard');
+        fetchDashboardDataForCondo((loggedInUser as CondominiumInfo).id);
+    }
+    // Else, a condo must be selected first by higher roles
+  };
+  
+  const handleNavigateToReportsView = () => {
+    if (selectedCondominium) {
+        setAuthenticatedAppView('reports');
+    } else if (userRole === 'condominiumUser' && loggedInUser) {
         setSelectedCondominium(loggedInUser as CondominiumInfo);
         setAuthenticatedAppView('reports');
-    } else if (userRole === 'admin' && selectedCondominium) {
-        setAuthenticatedAppView('reports');
-    } else if (userRole === 'admin' && !selectedCondominium) {
-        setAuthenticatedAppView('reports'); 
     }
-  }, [userRole, loggedInUser, selectedCondominium]);
+  };
 
+  const handleNavigateToClientDetailsView = () => {
+      if (selectedCondominium && (userRole === 'condoAdminCompany' || (userRole === 'superAdmin' && selectedAdminCompany))) {
+          setAuthenticatedAppView('clientDetails');
+      }
+  };
+  
+  const handleUpdateCondominiumDetails = async (condoId: string, detailsToUpdate: Partial<CondominiumInfo>) => {
+    const updatedCondo = await updateCondominiumDetails(condoId, detailsToUpdate);
+    if (updatedCondo) {
+        setSelectedCondominium(updatedCondo as CondominiumInfo); // Ensure type cast
+        // If the list of condominiums is visible, it should ideally re-fetch or update.
+        // For now, updating selectedCondominium is key for ClientDetailsManagementPage.
+    }
+    return updatedCondo;
+  };
 
   const handleRefreshDashboard = () => {
     if (selectedCondominium && authenticatedAppView === 'dashboard') { 
-      fetchDashboardData(selectedCondominium.id);
+      fetchDashboardDataForCondo(selectedCondominium.id);
     }
   };
 
@@ -230,24 +328,45 @@ const App: React.FC = () => {
         setPumpStatus(newPumpStatus);
     } catch (error) {
         console.error("Failed to toggle pump state:", error);
-        setDashboardError("Falha ao acionar o recurso. Tente novamente."); // Generic message
+        setDashboardError("Falha ao acionar o recurso. Tente novamente."); 
     } finally {
         setIsTogglingPump(false);
     }
   };
+  
+  const handleBackToCondominiumManagement = () => {
+    // This function is used to go back from ClientDetails or Dashboard (for an admin role) to the list of condominiums
+    if (userRole === 'superAdmin' && selectedAdminCompany) {
+        setAuthenticatedAppView('condominiumManagement');
+        setSelectedCondominium(null); // Deselect the specific condo
+    } else if (userRole === 'condoAdminCompany') {
+        setAuthenticatedAppView('condominiumManagement');
+        setSelectedCondominium(null); // Deselect the specific condo
+    }
+  };
+
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
-  if (appScreen === 'home') {
-    return <HomePage onNavigateToLogin={navigateToLogin} />;
-  }
-
-  if (appScreen === 'login') {
-    return <LoginPage onLogin={handleLogin} onNavigateToHome={navigateToHome} loginError={loginError} isLoading={isLoginLoading} />;
-  }
+  // --- Render logic ---
+  if (appScreen === 'home') return <HomePage onNavigateToLogin={navigateToLogin} />;
+  if (appScreen === 'login') return <LoginPage onLogin={handleLogin} onNavigateToHome={navigateToHome} loginError={loginError} isLoading={isLoginLoading} />;
 
   if (appScreen === 'authenticatedApp' && isAuthenticated && loggedInUser) {
-    const isClientSelectedByAdmin = userRole === 'admin' && !!selectedCondominium;
+    let headerSelectedAdminCompanyName: string | null = null;
+    let headerSelectedCondominiumName: string | null = null;
+
+    if (userRole === 'superAdmin' && selectedAdminCompany) {
+        headerSelectedAdminCompanyName = selectedAdminCompany.name;
+        if (selectedCondominium) {
+            headerSelectedCondominiumName = selectedCondominium.name;
+        }
+    } else if (userRole === 'condoAdminCompany' && selectedCondominium) {
+         // loggedInUser should be CondoAdminCompanyInfo
+        headerSelectedAdminCompanyName = (loggedInUser as CondoAdminCompanyInfo).name;
+        headerSelectedCondominiumName = selectedCondominium.name;
+    }
+
 
     return (
       <div className="min-h-screen flex flex-col">
@@ -257,11 +376,8 @@ const App: React.FC = () => {
             userRole={userRole}
             onLogout={handleLogout}
             authenticatedAppView={authenticatedAppView}
-            selectedCondominiumName={ // Name remains "condominium" for now, as data structure is CondominiumInfo
-                (userRole === 'admin' && (authenticatedAppView === 'dashboard' || authenticatedAppView === 'reports')) 
-                ? selectedCondominium?.name 
-                : undefined
-            }
+            selectedAdminCompanyName={headerSelectedAdminCompanyName}
+            selectedCondominiumName={headerSelectedCondominiumName}
         />
         <div className="flex flex-1 pt-16"> 
             <Sidebar
@@ -269,26 +385,52 @@ const App: React.FC = () => {
                 onToggleSidebar={toggleSidebar}
                 userRole={userRole}
                 currentView={authenticatedAppView}
-                navigateToAdminPanel={handleBackToAdminPanel}
+                navigateToSuperAdminManagement={handleNavigateToSuperAdminManagement}
+                navigateToCondominiumManagement={handleNavigateToCondominiumManagement}
                 navigateToDashboardView={handleNavigateToDashboardView}
                 navigateToReportsView={handleNavigateToReportsView}
-                isCondoSelectedByAdmin={isClientSelectedByAdmin} // Renamed for clarity
+                navigateToClientDetailsView={selectedCondominium ? handleNavigateToClientDetailsView : undefined}
+                isAdminCompanySelectedBySuperAdmin={!!(userRole === 'superAdmin' && selectedAdminCompany)}
+                isCondominiumSelected={!!selectedCondominium}
             />
             <main 
               className="flex-grow p-4 sm:p-6 lg:p-8 bg-gray-100 overflow-y-auto transition-all duration-300 ease-in-out"
               style={{ marginLeft: isSidebarOpen ? '16rem' : '4.5rem' }} 
             >
-              {userRole === 'admin' && authenticatedAppView === 'admin' && (
-                <AdminCompanyManagement onViewCompanyDashboard={handleViewClientDashboardFromAdmin} />
+              {/* Super Admin Management View */}
+              {userRole === 'superAdmin' && authenticatedAppView === 'superAdminManagement' && (
+                <SuperAdminManagement onViewCondominiumsForAdminCompany={handleSelectAdminCompanyFromSuperAdmin} />
+              )}
+              
+              {/* Condominium (Client) Management View - For CondoAdminCompany or SuperAdmin with selected AdminCompany */}
+              {((userRole === 'condoAdminCompany') || 
+                (userRole === 'superAdmin' && selectedAdminCompany)) && 
+                authenticatedAppView === 'condominiumManagement' && (
+                <CondominiumManagement
+                  managingCompanyContext={userRole === 'condoAdminCompany' ? (loggedInUser as CondoAdminCompanyInfo) : selectedAdminCompany!}
+                  onViewCondominiumDashboard={handleSelectCondominium}
+                  onManageCondominiumDetails={handleManageCondominiumDetails}
+                  titleOverride={userRole === 'condoAdminCompany' ? `Meus Condomínios (${(loggedInUser as CondoAdminCompanyInfo).name})`: undefined}
+                />
               )}
 
-              {authenticatedAppView === 'dashboard' && selectedCondominium && (
+              {/* Client (Condominium) Details Management Page */}
+              {selectedCondominium && authenticatedAppView === 'clientDetails' && (userRole === 'condoAdminCompany' || userRole === 'superAdmin') && (
+                <ClientDetailsManagementPage
+                  initialClientData={selectedCondominium}
+                  onUpdateClientDetails={handleUpdateCondominiumDetails}
+                  onBackToList={handleBackToCondominiumManagement} // Go back to the list of condominiums
+                />
+              )}
+
+              {/* Condominium Dashboard View */}
+              {selectedCondominium && authenticatedAppView === 'dashboard' && (
                 <>
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <div>
-                      {userRole === 'admin' && ( 
-                        <Button onClick={handleBackToAdminPanel} variant="ghost" size="sm" leftIcon={<ArrowLeftIcon />} className="mb-2 sm:mb-0 hidden sm:flex">
-                            Voltar para Gerenciamento
+                      {(userRole === 'superAdmin' || userRole === 'condoAdminCompany') && ( 
+                        <Button onClick={handleBackToCondominiumManagement} variant="ghost" size="sm" leftIcon={<ArrowLeftIcon />} className="mb-2 sm:mb-0 hidden sm:flex">
+                            Voltar para Lista de Condomínios
                         </Button>
                       )}
                       <h2 className="text-2xl font-semibold text-gray-700 mt-1">
@@ -299,42 +441,24 @@ const App: React.FC = () => {
                         Atualizar Dados do Painel
                     </Button>
                   </div>
-
-                  {dashboardError && (
-                    <Card className="mb-6 bg-red-50 border border-red-200">
-                      <p className="text-red-700 font-medium">{dashboardError}</p>
-                    </Card>
-                  )}
-
+                  {dashboardError && <Card className="mb-6 bg-red-50 border border-red-200"><p className="text-red-700 font-medium">{dashboardError}</p></Card>}
                   <DashboardMetrics metrics={metrics} loading={isLoadingDashboardData && !metrics} />
                   <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <Card title="Tendência de Consumo Mensal (Últimos 30 dias)" className="lg:col-span-2">
                       {isLoadingDashboardData && !monthlyTrend.length ? <div className="flex justify-center items-center h-64"><Spinner size="lg"/></div> : 
-                        <ConsumptionChart 
-                            data={monthlyTrend} 
-                            yAxisLabel="Consumo (m³)" // This label might need to be generic or configurable if it's not always water
-                            tooltipValueSuffix=" m³"
-                            tooltipLegendName="Consumo"
-                            seriesName="Consumo Mensal"
-                        />}
+                        <ConsumptionChart data={monthlyTrend} yAxisLabel="Consumo (m³)" tooltipValueSuffix=" m³" tooltipLegendName="Consumo" seriesName="Consumo Mensal"/>}
                     </Card>
                     <GeminiAnalysisCard metrics={metrics} />
                   </div>
+                  <div className="mt-6">
+                     <Card title="Dados Ambientais (Temperatura e Umidade)">
+                        <EnvironmentDataChart data={environmentData} isLoading={isLoadingDashboardData && !environmentData.length && !environmentDataError} error={environmentDataError}/>
+                     </Card>
+                  </div>
                   <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <PumpStatusCard 
-                        pumpStatus={pumpStatus} 
-                        isLoading={isLoadingDashboardData && !pumpStatus}
-                        onTogglePump={handleTogglePump}
-                        isTogglingPump={isTogglingPump}
-                    />
-                    <TankLevelCard 
-                        tankLevel={tankLevel} 
-                        isLoading={isLoadingDashboardData && !tankLevel} 
-                    />
-                    <TankLocationMapCard 
-                        tankLocation={tankLocation} 
-                        isLoading={isLoadingDashboardData && !tankLocation}
-                    />
+                    <PumpStatusCard pumpStatus={pumpStatus} isLoading={isLoadingDashboardData && !pumpStatus} onTogglePump={handleTogglePump} isTogglingPump={isTogglingPump}/>
+                    <TankLevelCard tankLevel={tankLevel} isLoading={isLoadingDashboardData && !tankLevel} />
+                    <TankLocationMapCard tankLocation={tankLocation} isLoading={isLoadingDashboardData && !tankLocation}/>
                   </div>
                   <div className="mt-6">
                       <Card title="Consumo por Unidade (Mês Atual)">
@@ -344,24 +468,37 @@ const App: React.FC = () => {
                 </>
               )}
 
-              {authenticatedAppView === 'reports' && selectedCondominium && (
-                <ReportsPage 
-                    selectedCondominium={selectedCondominium} 
-                    userRole={userRole} 
-                />
+              {/* Condominium Reports View */}
+              {selectedCondominium && authenticatedAppView === 'reports' && (
+                <ReportsPage selectedCondominium={selectedCondominium} userRole={userRole} />
               )}
-
-              {(authenticatedAppView === 'dashboard' || authenticatedAppView === 'reports') && !selectedCondominium && userRole === 'admin' && ( 
-                  <div className="text-center py-10">
-                      <p className="text-xl text-gray-600">Nenhum cliente selecionado.</p>
-                      <p className="text-sm text-gray-500 mt-2">
-                        Selecione um cliente no painel de Gerenciamento para ver seu {authenticatedAppView === 'dashboard' ? 'painel' : 'relatórios'}.
-                      </p>
-                      <Button onClick={handleBackToAdminPanel} variant="primary" className="mt-4">
-                          Ir para Gerenciamento
-                      </Button>
+              
+              {/* Fallback for admin roles if no selection is made for views requiring selection */}
+              {(userRole === 'superAdmin' || userRole === 'condoAdminCompany') && !selectedCondominium && 
+                (authenticatedAppView === 'dashboard' || authenticatedAppView === 'reports' || authenticatedAppView === 'clientDetails') && (
+                 <div className="text-center py-10">
+                    <p className="text-xl text-gray-600">Nenhum condomínio selecionado.</p>
+                    <p className="text-sm text-gray-500 mt-2">
+                      {userRole === 'superAdmin' && !selectedAdminCompany ? "Primeiro, selecione uma Administradora de Condomínios." : "Selecione um condomínio para ver esta página."}
+                    </p>
+                    <Button 
+                        onClick={userRole === 'superAdmin' && !selectedAdminCompany ? handleNavigateToSuperAdminManagement : handleNavigateToCondominiumManagement} 
+                        variant="primary" 
+                        className="mt-4">
+                      Ir para Gerenciamento
+                    </Button>
                   </div>
               )}
+               {userRole === 'superAdmin' && !selectedAdminCompany && authenticatedAppView === 'condominiumManagement' && (
+                 <div className="text-center py-10">
+                    <p className="text-xl text-gray-600">Nenhuma Administradora de Condomínios selecionada.</p>
+                    <Button onClick={handleNavigateToSuperAdminManagement} variant="primary" className="mt-4">
+                      Gerenciar Administradoras
+                    </Button>
+                  </div>
+               )}
+
+
             </main>
         </div>
       </div>

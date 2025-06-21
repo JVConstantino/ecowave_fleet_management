@@ -16,8 +16,26 @@ export const CHART_UNIT_COLORS = [
   "#f97316", // orange-500
   "#8b5cf6", // violet-500
 ];
+export const TEMP_CHART_COLOR = "#f97316"; // orange-500
+export const HUMIDITY_CHART_COLOR = "#0ea5e9"; // sky-500
+
 
 // Mock Authentication Credentials
-export const MOCK_ADMIN_EMAIL = "admin@ecowave.com"; // Updated domain for consistency
-export const MOCK_ADMIN_PASSWORD = "adminpass";
-export const MOCK_CONDO_PASSWORD = "condopass"; // Generic password for all mock condos
+export const MOCK_SUPER_ADMIN_EMAIL = "superadmin@gmail.com";
+export const MOCK_SUPER_ADMIN_PASSWORD = "123456";
+
+// This admin will be CondoAdminCompany "Gestão de Águas Inteligentes Ltda."
+export const MOCK_CONDO_ADMIN_COMPANY_EMAIL_1 = "gestao01@gmail.com"; 
+export const MOCK_CONDO_ADMIN_COMPANY_PASSWORD_1 = "123456";
+
+// This is another CondoAdminCompany for variety
+export const MOCK_CONDO_ADMIN_COMPANY_EMAIL_2 = "admincomp2@example.com";
+export const MOCK_CONDO_ADMIN_COMPANY_PASSWORD_2 = "comp2pass";
+
+// Legacy admin email and password, maps to "Administradora Legada (JV)"
+export const MOCK_ADMIN_EMAIL = "joaovictor.priv@gmail.com"; 
+export const MOCK_ADMIN_PASSWORD = "123456"; 
+
+
+export const MOCK_CONDO_PASSWORD = "123456"; // Generic password for individual condos (Síndico/Cliente)
+                                           // Used with an ID like "condominio01@gmail.com"
